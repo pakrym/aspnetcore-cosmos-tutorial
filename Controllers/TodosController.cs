@@ -3,150 +3,122 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
 using DotNetCoreSqlDb.Models;
+using Microsoft.Azure.Cosmos;
 
 namespace DotNetCoreSqlDb.Controllers
 {
     public class TodosController : Controller
     {
-        private readonly MyDatabaseContext _context;
+        private readonly Container _container;
 
-        public TodosController(MyDatabaseContext context)
+        public TodosController(CosmosClient client)
         {
-            _context = context;
+            _container = client.GetContainer("ToDo", "ToDos");
         }
 
         // GET: Todos
         public async Task<IActionResult> Index()
         {
-            return View(await _context.Todo.ToListAsync());
+            List<Todo> allEntries = new List<Todo>();
+
+            FeedIterator<Todo> iterator = _container.GetItemQueryIterator<Todo>();
+            while (iterator.HasMoreResults)
+            {
+                var page = await iterator.ReadNextAsync();
+                allEntries.AddRange(page);
+            }
+
+            return View(allEntries);
         }
 
         // GET: Todos/Details/5
-        public async Task<IActionResult> Details(int? id)
+        public async Task<IActionResult> Details(string id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var todo = await _context.Todo
-                .FirstOrDefaultAsync(m => m.ID == id);
-            if (todo == null)
-            {
-                return NotFound();
-            }
+            var todo = await _container.ReadItemAsync<Todo>(id, new PartitionKey(id));
 
-            return View(todo);
+            return View(todo.Resource);
         }
 
         // GET: Todos/Create
         public IActionResult Create()
         {
-            return View();
+            return View(new Todo() { Id = Guid.NewGuid().ToString("N")});
         }
 
         // POST: Todos/Create
-        // To protect from overposting attacks, please enable the specific properties you want to bind to, for 
+        // To protect from overposting attacks, please enable the specific properties you want to bind to, for
         // more details see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ID,Description,CreatedDate")] Todo todo)
+        public async Task<IActionResult> Create([Bind("Id,Description,CreatedDate")] Todo todo)
         {
             if (ModelState.IsValid)
             {
-                _context.Add(todo);
-                await _context.SaveChangesAsync();
+                await _container.CreateItemAsync(todo, new PartitionKey(todo.Id));
                 return RedirectToAction(nameof(Index));
             }
             return View(todo);
         }
 
         // GET: Todos/Edit/5
-        public async Task<IActionResult> Edit(int? id)
+        public async Task<IActionResult> Edit(string id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var todo = await _context.Todo.FindAsync(id);
-            if (todo == null)
-            {
-                return NotFound();
-            }
-            return View(todo);
+            var todo = await _container.ReadItemAsync<Todo>(id, new PartitionKey(id));
+
+            return View(todo.Resource);
         }
 
         // POST: Todos/Edit/5
-        // To protect from overposting attacks, please enable the specific properties you want to bind to, for 
+        // To protect from overposting attacks, please enable the specific properties you want to bind to, for
         // more details see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ID,Description,CreatedDate")] Todo todo)
+        public async Task<IActionResult> Edit(string id, [Bind("Id,Description,CreatedDate")] Todo todo)
         {
-            if (id != todo.ID)
+            if (id != todo.Id)
             {
                 return NotFound();
             }
 
             if (ModelState.IsValid)
             {
-                try
-                {
-                    _context.Update(todo);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!TodoExists(todo.ID))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
+                await _container.UpsertItemAsync(todo, new PartitionKey(todo.Id));
                 return RedirectToAction(nameof(Index));
             }
             return View(todo);
         }
 
         // GET: Todos/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        public async Task<IActionResult> Delete(string id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var todo = await _context.Todo
-                .FirstOrDefaultAsync(m => m.ID == id);
-            if (todo == null)
-            {
-                return NotFound();
-            }
+            var todo = await _container.ReadItemAsync<Todo>(id, new PartitionKey(id));
 
-            return View(todo);
+            return View(todo.Resource);
         }
 
         // POST: Todos/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public async Task<IActionResult> DeleteConfirmed(string id)
         {
-            var todo = await _context.Todo.FindAsync(id);
-            _context.Todo.Remove(todo);
-            await _context.SaveChangesAsync();
+            await _container.DeleteItemAsync<Todo>(id, new PartitionKey(id));
             return RedirectToAction(nameof(Index));
-        }
-
-        private bool TodoExists(int id)
-        {
-            return _context.Todo.Any(e => e.ID == id);
         }
     }
 }

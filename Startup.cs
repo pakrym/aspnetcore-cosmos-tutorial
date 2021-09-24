@@ -10,8 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.EntityFrameworkCore;
 using DotNetCoreSqlDb.Models;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Azure;
 
 namespace DotNetCoreSqlDb
 {
@@ -28,8 +29,12 @@ namespace DotNetCoreSqlDb
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
-            services.AddDbContext<MyDatabaseContext>(options =>
-                    options.UseSqlite("Data Source=localdatabase.db"));
+            services.AddAzureClients(builder =>
+            {
+                builder.AddClient<CosmosClient, CosmosClientOptions>((options, token) => new CosmosClient(Configuration["Cosmos:Endpoint"], token));
+
+            });
+            services.AddApplicationInsightsTelemetry(Configuration);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

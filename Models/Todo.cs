@@ -1,11 +1,13 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
+using Newtonsoft.Json;
 
 namespace DotNetCoreSqlDb.Models
 {
     public class Todo
     {
-        public int ID { get; set; }
+        [JsonProperty(PropertyName = "id")]
+        public string Id { get; set; }
         public string Description { get; set; }
 
         [Display(Name = "Created Date")]
